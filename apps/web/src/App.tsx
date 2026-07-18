@@ -97,6 +97,9 @@ function ChatPage({
           sessions={sessionsHook.sessions}
           sessionsLoading={sessionsHook.loading}
           activeSessionId={chat.sessionId}
+          onPickSession={(id) => {
+            if (id !== chat.sessionId) chat.loadSession(id);
+          }}
           onCloseSession={onCloseSession}
           onDeleteSession={onDeleteSession}
         />

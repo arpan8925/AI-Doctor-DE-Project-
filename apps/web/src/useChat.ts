@@ -171,6 +171,48 @@ export function useChat(getToken: () => Promise<string>) {
     setPendingAttachments((cur) => cur.filter((a) => a.id !== id));
   }, []);
 
+  const loadSession = useCallback(
+    async (id: string) => {
+      if (busy) return;
+      try {
+        const token = await getToken();
+        const r = await fetch(`${API_BASE}/sessions/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data = await r.json() as {
+          session_id: string;
+          messages: { role: "user" | "assistant"; content: string }[];
+          score: number;
+          action: string;
+          differential: DifferentialItem[];
+          cost_usd: number;
+          settled: boolean;
+        };
+        const loaded: Message[] = data.messages.map((m) => ({
+          id: newId(),
+          role: m.role === "assistant" ? "ai" : "user",
+          content: m.content,
+          timestamp: Date.now(),
+        }));
+        setMessages(loaded);
+        setSessionId(data.session_id);
+        setScore(data.score);
+        setAction(data.action);
+        setDifferential(data.differential);
+        setCostUsd(data.cost_usd);
+        setSettled(data.settled);
+        setError(null);
+        setRedFlag(null);
+        setPendingAttachments([]);
+        setTopupRequired(false);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to load session");
+      }
+    },
+    [busy, getToken],
+  );
+
   const reset = useCallback(async () => {
     // Settle current session before tearing down (idempotent on backend).
     if (sessionId && !settled) {
@@ -217,6 +259,7 @@ export function useChat(getToken: () => Promise<string>) {
     removeAttachment,
     dismissRedFlag: () => setRedFlag(null),
     reset,
+    loadSession,
     endSession,
   };
 }

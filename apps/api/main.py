@@ -80,6 +80,45 @@ def get_my_sessions(uid: str = Depends(get_current_uid)) -> list[dict[str, Any]]
     return list_sessions(uid)
 
 
+class SessionMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class SessionDetail(BaseModel):
+    session_id: str
+    messages: list[SessionMessage]
+    score: int
+    action: str
+    differential: list[DifferentialItem]
+    cost_usd: float
+    settled: bool
+
+
+@app.get("/sessions/{session_id}", response_model=SessionDetail)
+def get_session_detail(session_id: str, uid: str = Depends(get_current_uid)) -> SessionDetail:
+    """Return the full transcript and state for a session — used to resume a past chat."""
+    state = get_session(session_id, uid)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Unknown session_id")
+    messages = [
+        SessionMessage(role=m["role"], content=m["content"])
+        for m in state.transcript
+        if m.get("role") in ("user", "assistant")
+    ]
+    return SessionDetail(
+        session_id=session_id,
+        messages=messages,
+        score=state.score(),
+        action=state.action(),
+        differential=[
+            DifferentialItem(**d) for d in state.differential()
+        ],
+        cost_usd=state.cost_usd,
+        settled=state.ended,
+    )
+
+
 @app.post("/sessions", response_model=StartSessionResponse)
 def start_session(uid: str = Depends(get_current_uid)) -> StartSessionResponse:
     # Block creation if balance is negative — settle pending charges first.
